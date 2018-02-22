@@ -11,7 +11,7 @@ import pprint
 from collections import defaultdict
 from codecs import ignore_errors
 import itertools
-from pygame.tests.transform_test import threshold
+
 
 EXPANSION_RADIUS = 27.5
 EXPANSION_THRESHOLD = 0.65
