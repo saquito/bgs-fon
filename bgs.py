@@ -201,7 +201,7 @@ def is_update_needed(cur_time = None):
   if cur_time:
     if isinstance(cur_time,str):
       current_time = get_epoch_from_utc_time(cur_time)
-    elif isinstance(cur_time,float):
+    elif isinstance(cur_time,float) or isinstance(cur_time,int):
       current_time = cur_time
     else:
       print("DATE FORMAT ERROR")
@@ -237,12 +237,12 @@ def get_timestamp(cur_time = None):
   if cur_time:
     if isinstance(cur_time,str):
       current_time = get_epoch_from_utc_time(cur_time)
-    elif isinstance(cur_time,float):
+    elif isinstance(cur_time,float) or isinstance(cur_time,int):
       current_time = cur_time
     else:
       print("DATE FORMAT ERROR")
       exit(-1)
-  return current_time
+  return int(current_time)
 
 def time_functions_test():
   for test_check_time in ["10-02-2018 13:29:00",
@@ -319,7 +319,7 @@ def update_tick(cur_time = None, local = False, history = False):
           active_state_entries.append([int(timestamp),state,'activeState',faction['name'],systemName,0])
           #print(timestamp,state)
         for timestamp in faction['influenceHistory']:
-          system_faction_entries.append([timestamp,
+          system_faction_entries.append([int(timestamp),
             faction['name'],
             systemName,
             faction['influenceHistory'][timestamp]])
@@ -328,7 +328,7 @@ def update_tick(cur_time = None, local = False, history = False):
             if not state:
               continue
             state = state[0]
-            recovering_state_entries.append([timestamp,
+            recovering_state_entries.append([int(timestamp),
                                   state['state'],
                                   "recoveringState",
                                   faction['name'],
@@ -339,7 +339,7 @@ def update_tick(cur_time = None, local = False, history = False):
             if not state:
               continue
             state = state[0]
-            pending_state_entries.append([timestamp,
+            pending_state_entries.append([int(timestamp),
                                   state['state'],
                                   "pendingState",
                                   faction['name'],
@@ -446,13 +446,13 @@ class Faction:
     try:
       c.execute('SELECT allegiance,government,is_player,native_system FROM Factions WHERE faction_name = "{0}"'.format(faction_name))
       self.allegiance, self.government, self.is_player, self.native_system = c.fetchone()
-      c.execute('SELECT state FROM faction_system WHERE name = "{0}" AND date = {1}'.format(self.name,get_last_update()))
+      c.execute('SELECT state_name FROM faction_system_state WHERE faction_name = "{0}" AND date = {1} AND state_type="activeState"'.format(self.name,get_last_update()))
       state_data = c.fetchone()
       if not state_data:
         c.execute('SELECT MAX(date) FROM faction_system WHERE name = "{0}"'.format(self.name))
         last_update = c.fetchone()[0]
-        c.execute('SELECT state FROM faction_system WHERE name = "{0}" AND date = {1}'.format(self.name,last_update))
-      self.state = c.fetchone()[0]
+        c.execute('SELECT state_name FROM faction_system_state WHERE faction_name = "{0}" AND date = {1} AND state_type="activeState"'.format(self.name,last_update))
+      self.state = c.fetchone()
       self.ok = True
     except:
       None
@@ -507,9 +507,13 @@ class Faction:
     return(systems)
   
   def get_current_influence_in_system(self,system_name):
-    system = self.get_status_in_system(system_name)
-    if system: 
-      return(system.popitem()[1]['status']['influence'])
+    if not self.ok:
+      return None
+    c = conn.cursor()
+    print('SELECT influence FROM faction_system WHERE system = "{0}" AND name = "{1}" and date = {2}'.format(systemName,self.name,get_last_update()))
+    c.execute('SELECT influence FROM faction_system WHERE system = "{0}" AND name = "{1}" and date = {2}'.format(systemName,self.name,get_last_update()))
+    return c.fetchone()
+      
     return None
   
   def get_current_pending_states(self):
@@ -540,7 +544,7 @@ class Faction:
       end_timestamp = get_time(end_timestamp)
 
     timestamps = defaultdict(dict)
-    c.execute('SELECT date,influence, state FROM faction_system WHERE name = "{0}" AND system = "{1}" AND date >= {2} AND date <= {3}'.format(self.name,system_name,start_timestamp,end_timestamp))
+    c.execute('SELECT date,influence FROM faction_system WHERE name = "{0}" AND system = "{1}" AND date >= {2} AND date <= {3}'.format(self.name,system_name,start_timestamp,end_timestamp))
     status_entries =  list(c.fetchall())
     c.execute('SELECT date,state_name,state_type,trend FROM faction_system_state WHERE faction_name = "{0}" AND system_name = "{1}" AND date >= {2} AND date <= {3}'.format(self.name,system_name,start_timestamp,end_timestamp))
     state_entries = list(c.fetchall())
@@ -549,7 +553,7 @@ class Faction:
       timestamp = str(int(float(timestamp)))
       timestamps[timestamp][state_type + 's'] = {'state':state_name, 'trend':trend}
     for entry in status_entries:
-      timestamp,influence, state_name = entry
+      timestamp,influence = entry
       timestamp = str(int(float(timestamp)))
       timestamps[timestamp]['status'] = {'influence':influence,'state':state_name}
     return timestamps
@@ -665,20 +669,24 @@ systemName = "Naunin"
 #clean_fixed_tables()
 clean_updates()
 #clean_local_json_path()
-#fill_systems_in_bubble(systemName,EXPANSION_RADIUS,True)
+#fill_systems_in_bubble(systemName,EXPANSION_RADIUS,local=True)
 #update_tick(get_timestamp("23-02-2018 13:30:00"),local = True,history = True)
 #update_tick(get_timestamp("23-02-2018 13:30:00"),local = True,history = True)
 #update_tick(get_timestamp("23-02-2018 13:30:00"),local = True,history = False)
-#update_tick(local=True)
+update_tick(get_timestamp("23-02-2018 13:30:00"),local = True,history = True)
+update_tick()
 
-update_tick(local=True,history=True)
+#update_tick(local=True,history=True)
 #pprint.pprint(get_system_status(systemName),width=200) 
-exit(0)
+
 c = conn.cursor()
 
 c.execute("SELECT * from Factions")
 
 kb = Faction("Naunin Jet Netcoms Incorporated")
+print(kb)
+print(kb.get_current_influence_in_system("Naunin"))
+exit(0)
 
 timestamps = kb.get_status_in_system('Maopi', 0,get_timestamp())
 if timestamps:
@@ -687,11 +695,14 @@ if timestamps:
       print(get_utc_time_from_epoch(int(ts)),timestamps[ts]['status'])
 
 f = Faction('Naunin Jet Netcoms Incorporated')
+
 print(f)
 print(f.get_current_pending_states())
 print(f.get_current_recovering_states())
 current_system = System(systemName)
 factions = current_system.get_factions()
+conn.close()
+
 print("\n","*"*10,"RETREAT RISK REPORT","*"*10,"\n")
 
 print("The following factions are in risk of enter in state of Retreat:\n")
