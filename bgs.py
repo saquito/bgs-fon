@@ -9,7 +9,6 @@ import os
 import shutil
 import pprint
 from collections import defaultdict
-from codecs import ignore_errors
 import itertools
 
 
@@ -17,7 +16,7 @@ EXPANSION_RADIUS = 27.5
 EXPANSION_THRESHOLD = 0.65
 RETREAT_THRESHOLD = 0.05
 WAR_THRESHOLD = 0.05
-TICK_TIME = "13:30:00"
+TICK_TIME = "15:30:00"
 TIME_FORMAT = '%d-%m-%Y %H:%M:%S'
 DEBUG_LEVEL = 0
 LOCAL_JSON_PATH = "LOCAL_JSON"
@@ -228,6 +227,8 @@ def is_update_needed(cur_time = None):
     return False
 
 def get_utc_time_from_epoch(epoch):
+  if isinstance(epoch,str):
+    epoch = int(epoch)
   return time.strftime(TIME_FORMAT,time.gmtime(epoch))
 
 def get_epoch_from_utc_time(utc_time):
@@ -475,7 +476,6 @@ class Faction:
     c = conn.cursor()
     c.execute('SELECT faction_name FROM Factions{0}'.format(criteria_sql))
     factions = c.fetchall()
-    print(factions)
     factions = [Faction(faction[0]) for faction in factions]
     return factions
   
@@ -652,10 +652,10 @@ def get_factions_with_retreat_risk(threshold = RETREAT_THRESHOLD):
           ret_risked.append({"faction":faction.name,"system":system_name,"influence":influence, "state":faction.state})
   return ret_risked
 
-def get_factions_with_expansion_risk():
+def get_factions_with_expansion_risk(threshold = EXPANSION_THRESHOLD):
   ret_risked = []
   for faction in Faction.get_all_factions():
-    risked = faction.get_expansion_risk()
+    risked = faction.get_expansion_risk(threshold)
     if risked:
       for system in risked:
         system_name, influence = system
@@ -670,20 +670,6 @@ def get_trend_text(trend):
     return "+"
   else:
     return "-"
-
-conn = sqlite3.connect(DATABASE)
-
-fresh_start = False
-
-systemName = "Naunin"
-if fresh_start:
-  clean_fixed_tables()
-  clean_updates()
-#clean_local_json_path()
-  fill_systems_in_bubble(systemName,EXPANSION_RADIUS,local=True)
-  update_tick(get_timestamp("23-02-2018 13:30:00"),local = True,history = True)
-update_tick()
-
 
 def get_retreat_risk_report(threshold = RETREAT_THRESHOLD):
   report = "\n" + "*"*10 + "RETREAT RISK REPORT" + "*"*10 + "\n\n"
@@ -704,7 +690,7 @@ def get_war_risk_report(threshold = WAR_THRESHOLD):
   report = "\n" + "*"*10 + "WAR RISK REPORT" + "*"*10 + "\n"
   report += "The following factions are in risk of enter in state of War:\n"
   for system in System.get_all_systems():
-    for faction1, faction2 in system.get_war_risk():
+    for faction1, faction2 in system.get_war_risk(threshold):
       report += "'{0}' ({1:.2f}%) versus '{2}' ({3:.2f}%) in '{4}'\n".format(faction1.name, faction1.get_current_influence_in_system(system.name)*100.0,
                                                                   faction2.name,faction2.get_current_influence_in_system(system.name)*100.0,system.name)
   return report
@@ -712,43 +698,61 @@ def get_war_risk_report(threshold = WAR_THRESHOLD):
 def get_expansion_risk_report(threshold = EXPANSION_THRESHOLD):
   report = "\n" + "*"*10 + "EXPANSION RISK REPORT" + "*"*10 + "\n"
   report += "The following factions are in risk of enter in state of Expansion:\n"
-  for risk in get_factions_with_expansion_risk():
+  for risk in get_factions_with_expansion_risk(threshold):
     report += "'{0}' from system '{1}' (Influence: {2:.3g} %, State: {3}, Distance: {4} lys)\n".format(risk['faction'],risk['system'],risk['influence']*100.0,risk['state'], System(risk['system']).distance)
   return report
 
 
+conn = sqlite3.connect(DATABASE)
 
-defence = Faction("Defence Party of Naunin")
-print(defence)  
+fresh_start = False
 
-for faction in Faction.get_all_factions(('faction_name LIKE "%Naunin%"')):
-  print(faction)
+systemName = "Naunin"
+if fresh_start:
+  clean_fixed_tables()
+  clean_updates()
+#clean_local_json_path()
+  fill_systems_in_bubble(systemName,EXPANSION_RADIUS,local=True)
+  update_tick(get_timestamp("23-02-2018 13:30:00"),local = True,history = True)
+update_tick()
+
+if 0:
+  defence = Faction("Defence Party of Naunin")
+  print(defence)  
+  
+  for faction in Faction.get_all_factions(('faction_name LIKE "%Naunin%"')):
+    print(faction)
   
 
 
-print(System.get_all_systems())
+  print(System.get_all_systems())
+  
+  my_system = System("Maopi")
+  f = Faction('Naunin Jet Netcoms Incorporated')
+  
+  kb = Faction("Kupol Bumba Alliance")
+  print(kb)
+  print(kb.get_current_influence_in_system("Naunin"))
+  
+  f = Faction('Naunin Jet Netcoms Incorporated')
+if 0:
+  print(f)
+  print("PENDING STATES:",f.get_current_pending_states())
+  print("RECOVERING STATES:",f.get_current_recovering_states())
+  current_system = System(systemName)
+  factions = current_system.get_factions()
+  
+  print(get_retreat_risk_report(0.025))
+  print(get_war_risk_report(0.01))
+  print(get_expansion_risk_report(0.7))
 
-my_system = System("Maopi")
-f = Faction('Naunin Jet Netcoms Incorporated')
-
-kb = Faction("Kupol Bumba Alliance")
-print(kb)
-print(kb.get_current_influence_in_system("Naunin"))
-
-f = Faction('Naunin Jet Netcoms Incorporated')
-
-print(f)
-print("PENDING STATES:",f.get_current_pending_states())
-print("RECOVERING STATES:",f.get_current_recovering_states())
-current_system = System(systemName)
-factions = current_system.get_factions()
-
-print(get_retreat_risk_report())
-print(get_war_risk_report())
-print(get_expansion_risk_report())
-
-
-
+systemName = "Naunin"
+for faction in System(systemName).get_factions():
+  print(faction.name)
+  status_history = faction.get_status_in_system(systemName,start_timestamp=0)
+  for entry in sorted(status_history):
+    #print(get_utc_time_from_epoch(entry),status_history[entry])
+    pass
 conn.close()
 
 exit(0)
