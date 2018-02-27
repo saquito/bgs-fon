@@ -10,6 +10,7 @@ import shutil
 import pprint
 from collections import defaultdict
 import itertools
+import psycopg2
 
 
 EXPANSION_RADIUS = 27.5
@@ -572,6 +573,13 @@ class Faction:
       timestamps[timestamp]['status'] = {'influence':influence,'state':state_name}
     return timestamps
 
+  def get_status_history_in_system(self,star_system):
+    entries = []
+    status_history = self.get_status_in_system(star_system,start_timestamp=0)
+    for entry in sorted(status_history):
+      entries.append((get_utc_time_from_epoch(entry),status_history[entry]))
+    return entries
+
 class System:
   def __init__(self,system_name):
     c = conn.cursor()
@@ -595,16 +603,19 @@ class System:
     return factions
   
   
-  def get_controller_and_state(self,timestamp = None):
+  def get_controller(self,timestamp = None):
     if not self.ok:
       return None
     c = conn.cursor()
     if not timestamp:
       timestamp = get_last_update()
-    c.execute('SELECT name,state FROM faction_system WHERE system = "{0}" AND date = "{1}" AND controller = 1'.format(self.name,timestamp))
-    faction_name, state =  c.fetchone()
-    conn.close()
-    return {"faction":Faction(faction_name),"state":state}
+    c.execute('SELECT controller_faction FROM system_status WHERE system = "{0}" AND date = "{1}"'.format(self.name,timestamp))
+    data = c.fetchone()
+    if data:
+      faction_name =  data[0]
+      return Faction(faction_name)
+    else:
+      return None
     
   def get_war_risk(self,threshold = WAR_THRESHOLD):
     factions = self.get_factions()
@@ -703,18 +714,16 @@ def get_expansion_risk_report(threshold = EXPANSION_THRESHOLD):
   return report
 
 
-conn = sqlite3.connect(DATABASE)
 
-fresh_start = False
 
-systemName = "Naunin"
-if fresh_start:
+def fresh_start(system_name):
   clean_fixed_tables()
   clean_updates()
-#clean_local_json_path()
-  fill_systems_in_bubble(systemName,EXPANSION_RADIUS,local=True)
+  clean_local_json_path()
+  fill_systems_in_bubble(system_name,EXPANSION_RADIUS,local=True)
   update_tick(get_timestamp("23-02-2018 13:30:00"),local = True,history = True)
-update_tick()
+  
+
 
 if 0:
   defence = Faction("Defence Party of Naunin")
@@ -735,24 +744,49 @@ if 0:
   print(kb.get_current_influence_in_system("Naunin"))
   
   f = Faction('Naunin Jet Netcoms Incorporated')
-if 0:
-  print(f)
-  print("PENDING STATES:",f.get_current_pending_states())
-  print("RECOVERING STATES:",f.get_current_recovering_states())
-  current_system = System(systemName)
-  factions = current_system.get_factions()
-  
+
+def get_risk_report():
   print(get_retreat_risk_report(0.025))
   print(get_war_risk_report(0.01))
   print(get_expansion_risk_report(0.7))
 
-systemName = "Naunin"
-for faction in System(systemName).get_factions():
-  print(faction.name)
-  status_history = faction.get_status_in_system(systemName,start_timestamp=0)
-  for entry in sorted(status_history):
-    #print(get_utc_time_from_epoch(entry),status_history[entry])
-    pass
+
+def get_player_report():
+  report = ""
+  factions = defaultdict(list)
+  for star_system in System.get_all_systems():
+    faction = star_system.get_controller()
+    if faction and faction.is_player:
+      factions[faction.name].append([star_system.name,star_system.distance,star_system.population,faction.get_current_influence_in_system(star_system.name)])
+  
+  
+  for faction in factions:
+    report +='Faction {0} controls {1} systems:\n'.format(faction, len(factions[faction]))
+    for controlled_system,distance,population,influence in factions[faction]:
+      report += "\t{0} (influence: {1:.1f}%, distance: {2}lys, population: {3})\n".format(controlled_system,influence*100.0,distance,population)
+  return report
+
+def get_system_status_history(star_system):
+  entries = []
+  for faction in System(star_system).get_factions():
+    status_history = faction.get_status_in_system(star_system,start_timestamp=0)
+    for entry in sorted(status_history):
+      entries.append((get_utc_time_from_epoch(entry),faction,status_history[entry]))
+  return entries
+
+conn = sqlite3.connect(DATABASE)
+update_tick()
+print(get_player_report())
+history = get_system_status_history("Naunin")
+for entry in history:
+  if 'status' in entry[2]:
+    print(entry[0],entry[1].name,entry[2]['status']['influence'])
+    
+history = Faction("Defence Party of Naunin").get_status_history_in_system("Naunin")
+for entry in history:
+  if 'status' in entry[1]:
+    print(entry[0],"Kupol Bumba Alliance",entry[1]['status']['influence'])
 conn.close()
 
 exit(0)
+
