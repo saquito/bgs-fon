@@ -11,6 +11,8 @@ import pprint
 from collections import defaultdict
 import itertools
 
+
+
 EXPANSION_RADIUS = 27.5
 EXPANSION_THRESHOLD = 0.65
 RETREAT_THRESHOLD = 0.05

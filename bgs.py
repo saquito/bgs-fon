@@ -390,20 +390,24 @@ def get_system_status_history(star_system):
   for faction in System(star_system).get_factions():
     status_history = faction.get_status_in_system(star_system,start_timestamp=0)
     for entry in sorted(status_history):
+      print(entry)
       entries.append((get_utc_time_from_epoch(entry),faction,status_history[entry]))
   return entries
 
 update_tick()
-print(get_player_report())
 history = get_system_status_history("Naunin")
 for entry in history:
   if 'status' in entry[2]:
     print(entry[0],entry[1].name,entry[2]['status']['influence'])
     
 history = Faction("Kupol Bumba Alliance").get_status_history_in_system("Naunin")
+state = "N/A"
 for entry in history:
   if 'status' in entry[1]:
-    print(",".join((entry[0].split(" ")[0],"{0:.8f}".format(entry[1]['status']['influence']))))
+    if 'activeStates' in entry[1]:
+      state = entry[1]['activeStates']['state']
+    print(",".join((entry[0].split(" ")[0],"{0:.8f} {1}".format(entry[1]['status']['influence'],state))))
+
 close_database_connection()
 
 exit(0)
