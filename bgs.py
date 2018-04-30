@@ -447,15 +447,18 @@ class Faction:
     self.json = ""
     if 1:
       c.execute('SELECT allegiance,government,is_player,native_system FROM Factions WHERE faction_name = "{0}"'.format(faction_name))
-      self.allegiance, self.government, self.is_player, self.native_system = c.fetchone()
-      c.execute('SELECT state_name FROM faction_system_state WHERE faction_name = "{0}" AND date = {1} AND state_type="activeState"'.format(self.name,get_last_update()))
-      state_data = c.fetchone()
-      if not state_data:
-        c.execute('SELECT date,state_name FROM faction_system_state WHERE faction_name = "{0}" AND state_type="activeState"'.format(self.name))
-        self.state = max(c.fetchall(),key=lambda x: x[0])[1]
-      else:
-        self.state = state_data[0]
-      self.ok = True
+      try:
+        self.allegiance, self.government, self.is_player, self.native_system = c.fetchone()
+        c.execute('SELECT state_name FROM faction_system_state WHERE faction_name = "{0}" AND date = {1} AND state_type="activeState"'.format(self.name,get_last_update()))
+        state_data = c.fetchone()
+        if not state_data:
+          c.execute('SELECT date,state_name FROM faction_system_state WHERE faction_name = "{0}" AND state_type="activeState"'.format(self.name))
+          self.state = max(c.fetchall(),key=lambda x: x[0])[1]
+        else:
+          self.state = state_data[0]
+        self.ok = True
+      except:
+        self.ok = False
 #    except:
 #      None
     if self.ok:
@@ -734,9 +737,9 @@ if 0:
   print(kb)
   print(kb.get_current_influence_in_system("Naunin"))
   
-  f = Faction('Naunin Jet Netcoms Incorporated')
-if 0:
-  print(f)
+ 
+if 1:
+  f = Faction('Movement for Ngalu Democrats')
   print("PENDING STATES:",f.get_current_pending_states())
   print("RECOVERING STATES:",f.get_current_recovering_states())
   current_system = System(systemName)
@@ -744,7 +747,7 @@ if 0:
   
   print(get_retreat_risk_report(0.025))
   print(get_war_risk_report(0.01))
-  print(get_expansion_risk_report(0.7))
+  print(get_expansion_risk_report(0.65))
 
 systemName = "Naunin"
 for faction in System(systemName).get_factions():
@@ -753,6 +756,8 @@ for faction in System(systemName).get_factions():
   for entry in sorted(status_history):
     #print(get_utc_time_from_epoch(entry),status_history[entry])
     pass
+ 
+  
 conn.close()
 
 exit(0)
